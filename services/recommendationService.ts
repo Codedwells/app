@@ -43,6 +43,10 @@ export interface SuggestedUsersResponse {
   suggested_users: RecommendationUser[];
 }
 
+export interface ExploreResponse {
+  explore: RecommendationPost[];
+}
+
 export interface TrainingResponse {
   status: string;
   total_samples?: number;
@@ -101,6 +105,24 @@ class RecommendationService {
     } catch (error) {
       console.error("Error fetching predicted likes:", error);
       throw new Error("Failed to fetch predicted likes");
+    }
+  }
+
+  async getExploreRecommendations(
+    userId: string,
+    limit: number = 30
+  ): Promise<ExploreResponse> {
+    try {
+      const response = await axios.get(
+        `${this.baseURL}/recommend/explore/${userId}?limit=${limit}`,
+        {
+          timeout: 10000,
+        }
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching explore recommendations:", error);
+      throw new Error("Failed to fetch explore recommendations");
     }
   }
 

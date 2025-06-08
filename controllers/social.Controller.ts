@@ -12,7 +12,7 @@ export async function getTimeline(
   try {
     const userId = req.user._id;
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    const limit = parseInt(req.query.limit as string) || 20; // Increased default limit
     const skip = (page - 1) * limit;
 
     const user = await User.findById(userId);
@@ -21,12 +21,17 @@ export async function getTimeline(
       return;
     }
 
+    // Get user's seen posts history
+    const userHistory = await UserPostHistory.findOne({ user: userId });
+    const seenPostIds = userHistory?.seenPosts || [];
+
     // Get posts from followed users + own posts
     const followingIds = [...user.following, user._id];
 
     const posts = await Post.find({
       author: { $in: followingIds },
       visibility: { $in: ["public", "followers"] },
+      _id: { $nin: seenPostIds }, // Exclude seen posts
     })
       .populate("author", "username fullName profilePicture isVerified")
       .populate("category", "name")
@@ -365,7 +370,7 @@ export async function getRecommendedTimeline(
 ): Promise<void> {
   try {
     const userId = req.user._id.toString();
-    const limit = parseInt(req.query.limit as string) || 20;
+    const limit = parseInt(req.query.limit as string) || 30; // Increased default limit
 
     // Get user's seen posts history
     const userHistory = await UserPostHistory.findOne({ user: userId });
@@ -471,35 +476,39 @@ async function getTimeFilteredPosts(
   return posts.slice(0, limit);
 }
 
-// Get explore page (predicted likes)
+// Get explore page (AI-powered diverse recommendations)
 export async function getExplorePosts(
   req: AuthenticatedRequest,
   res: Response
 ): Promise<void> {
   try {
     const userId = req.user._id.toString();
-    const limit = parseInt(req.query.limit as string) || 15;
+    const limit = parseInt(req.query.limit as string) || 30; // Increased default limit
 
     // Get user's seen posts history
     const userHistory = await UserPostHistory.findOne({ user: userId });
     const seenPostIds = userHistory?.seenPosts || [];
 
-    // Try to get AI predictions first
+    // Try to get AI explore recommendations first
     try {
-      const aiPredictions = await recommendationService.getPredictedLikes(
-        userId,
-        limit * 2 // Get more predictions to account for filtering
-      );
+      const aiExploreRecommendations =
+        await recommendationService.getExploreRecommendations(
+          userId,
+          limit * 2 // Get more recommendations to account for filtering
+        );
 
-      if (aiPredictions.predictions && aiPredictions.predictions.length > 0) {
-        // Filter out seen posts from AI predictions
-        const unseenPredictions = aiPredictions.predictions.filter(
+      if (
+        aiExploreRecommendations.explore &&
+        aiExploreRecommendations.explore.length > 0
+      ) {
+        // Filter out seen posts from AI recommendations
+        const unseenRecommendations = aiExploreRecommendations.explore.filter(
           (p) => !seenPostIds.some((seenId) => seenId.toString() === p.post_id)
         );
 
-        if (unseenPredictions.length > 0) {
+        if (unseenRecommendations.length > 0) {
           // Get full post details from MongoDB
-          const postIds = unseenPredictions.map((p) => p.post_id);
+          const postIds = unseenRecommendations.map((p) => p.post_id);
           const posts = await Post.find({ _id: { $in: postIds } })
             .populate("author", "username fullName profilePicture isVerified")
             .populate("category", "name")
@@ -507,18 +516,18 @@ export async function getExplorePosts(
 
           // Merge AI scores with full post data
           const enrichedPosts = posts.map((post) => {
-            const aiPost = unseenPredictions.find(
+            const aiPost = unseenRecommendations.find(
               (p) => p.post_id === post._id.toString()
             );
             return {
               ...post,
-              predictedScore: aiPost?.score || 0,
+              exploreScore: aiPost?.score || 0,
             };
           });
 
-          // Sort by predicted score and limit results
+          // Sort by explore score and limit results
           enrichedPosts.sort(
-            (a, b) => (b.predictedScore || 0) - (a.predictedScore || 0)
+            (a, b) => (b.exploreScore || 0) - (a.exploreScore || 0)
           );
 
           res.json(enrichedPosts.slice(0, limit));
@@ -527,7 +536,7 @@ export async function getExplorePosts(
       }
     } catch (aiError) {
       console.warn(
-        "AI prediction service unavailable, falling back to time-filtered posts:",
+        "AI explore service unavailable, falling back to time-filtered posts:",
         aiError
       );
     }

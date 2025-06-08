@@ -1,6 +1,9 @@
 class ExploreApp {
   constructor() {
     this.currentUser = null;
+    this.explorePage = 1;
+    this.exploreLoading = false;
+    this.exploreHasMore = true;
     this.init();
   }
 
@@ -12,6 +15,10 @@ class ExploreApp {
     }
 
     this.currentUser = SocialUtils.getCurrentUser();
+
+    // Initialize post view tracking
+    SocialUtils.postViewTracker.init();
+
     this.bindEvents();
     this.loadInitialContent();
   }
@@ -120,28 +127,57 @@ class ExploreApp {
     `;
   }
 
-  async loadExplorePosts() {
+  async loadExplorePosts(append = false) {
+    if (this.exploreLoading || (!append && !this.exploreHasMore)) return;
+
+    this.exploreLoading = true;
     try {
-      // Try recommendations first
+      // Try AI explore recommendations first
       let posts;
       let isAI = false;
+      const page = append ? this.explorePage : 1;
 
       try {
-        const response = await SocialUtils.makeApiCall("/api/v1/ai/explore");
-        posts = response.predictions || response;
+        // Call the new Python explore endpoint that filters seen posts
+        const response = await SocialUtils.makeApiCall(
+          `/api/v1/ai/explore?page=${page}&limit=30`
+        );
+        posts = response.explore || response; // Updated to match Python response format
         isAI = true;
         SocialUtils.showAIIndicator(true, "explore");
       } catch (aiError) {
         console.warn(
-          "AI recommendations failed, falling back to regular explore:",
+          "AI explore recommendations failed, falling back to regular explore:",
           aiError
         );
-        // Fallback to regular explore
-        posts = await SocialUtils.makeApiCall("/api/v1/timeline");
-        SocialUtils.showAIIndicator(false, "explore");
+        // Fallback to regular explore endpoint
+        try {
+          posts = await SocialUtils.makeApiCall(
+            `/api/v1/ai/explore?page=${page}&limit=30`
+          );
+          SocialUtils.showAIIndicator(false, "explore");
+        } catch (fallbackError) {
+          // Final fallback to timeline
+          posts = await SocialUtils.makeApiCall(
+            `/api/v1/timeline?page=${page}&limit=30`
+          );
+          SocialUtils.showAIIndicator(false, "explore");
+        }
       }
 
-      this.renderExplorePosts(posts);
+      if (append) {
+        this.appendToExplore(posts);
+      } else {
+        this.explorePage = 1;
+        this.exploreHasMore = true;
+        this.renderExplorePosts(posts);
+      }
+
+      if (posts.length < 30) {
+        this.exploreHasMore = false;
+      } else {
+        this.explorePage++;
+      }
     } catch (error) {
       console.error("Error loading explore posts:", error);
       SocialUtils.showError("Failed to load explore content");
@@ -155,6 +191,8 @@ class ExploreApp {
           </div>
         `;
       }
+    } finally {
+      this.exploreLoading = false;
     }
   }
 
@@ -178,8 +216,76 @@ class ExploreApp {
       .map((post) => this.renderPost(post))
       .join("");
 
+    // Add loading indicator for infinite scroll
+    if (this.exploreHasMore) {
+      exploreTimeline.innerHTML += `
+        <div id="explore-loading" class="loading-more" style="display: none;">
+          <div class="loading-spinner">Loading more posts...</div>
+        </div>
+      `;
+    }
+
     // Initialize post view tracking for all rendered posts
     SocialUtils.postViewTracker.observeAllPosts();
+
+    // Setup infinite scroll
+    this.setupInfiniteScroll();
+  }
+
+  appendToExplore(posts) {
+    const exploreTimeline = document.getElementById("exploreTimeline");
+    const loadingIndicator = document.getElementById("explore-loading");
+
+    if (!exploreTimeline || !posts || posts.length === 0) return;
+
+    // Remove loading indicator temporarily
+    if (loadingIndicator) {
+      loadingIndicator.remove();
+    }
+
+    // Append new posts
+    const newPostsHtml = posts.map((post) => this.renderPost(post)).join("");
+    exploreTimeline.insertAdjacentHTML("beforeend", newPostsHtml);
+
+    // Re-add loading indicator if there are more posts
+    if (this.exploreHasMore) {
+      exploreTimeline.insertAdjacentHTML(
+        "beforeend",
+        `
+        <div id="explore-loading" class="loading-more" style="display: none;">
+          <div class="loading-spinner">Loading more posts...</div>
+        </div>
+      `
+      );
+    }
+
+    // Initialize post view tracking for new posts
+    SocialUtils.postViewTracker.observeAllPosts();
+  }
+
+  setupInfiniteScroll() {
+    // Remove existing scroll listener to avoid duplicates
+    if (this.scrollHandler) {
+      window.removeEventListener("scroll", this.scrollHandler);
+    }
+
+    this.scrollHandler = () => {
+      if (this.exploreLoading || !this.exploreHasMore) return;
+
+      const { scrollTop, scrollHeight, clientHeight } =
+        document.documentElement;
+
+      // Load more when user is 80% down the page
+      if (scrollTop + clientHeight >= scrollHeight * 0.8) {
+        const loadingIndicator = document.getElementById("explore-loading");
+        if (loadingIndicator) {
+          loadingIndicator.style.display = "block";
+        }
+        this.loadExplorePosts(true);
+      }
+    };
+
+    window.addEventListener("scroll", this.scrollHandler);
   }
 
   renderPost(post) {

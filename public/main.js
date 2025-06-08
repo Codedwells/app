@@ -1,6 +1,9 @@
 class MainApp {
   constructor() {
     this.currentUser = null;
+    this.timelinePage = 1;
+    this.timelineLoading = false;
+    this.timelineHasMore = true;
     this.init();
   }
 
@@ -119,14 +122,36 @@ class MainApp {
     }
   }
 
-  async loadTimeline() {
+  async loadTimeline(append = false) {
+    if (this.timelineLoading || (!append && !this.timelineHasMore)) return;
+
+    this.timelineLoading = true;
     try {
-      const posts = await SocialUtils.makeApiCall("/api/v1/timeline");
-      this.renderTimeline(posts);
+      const page = append ? this.timelinePage : 1;
+      const posts = await SocialUtils.makeApiCall(
+        `/api/v1/timeline?page=${page}&limit=20`
+      );
+
+      if (append) {
+        this.appendToTimeline(posts);
+      } else {
+        this.timelinePage = 1;
+        this.timelineHasMore = true;
+        this.renderTimeline(posts);
+      }
+
+      if (posts.length < 20) {
+        this.timelineHasMore = false;
+      } else {
+        this.timelinePage++;
+      }
+
       SocialUtils.showAIIndicator(false, "timeline");
     } catch (error) {
       console.error("Error loading timeline:", error);
       SocialUtils.showError("Failed to load timeline");
+    } finally {
+      this.timelineLoading = false;
     }
   }
 
@@ -138,7 +163,6 @@ class MainApp {
       console.error("Error loading suggested users:", error);
     }
   }
-
   renderTimeline(posts) {
     const timeline = document.querySelector(".timeline");
     if (!timeline) return;
@@ -157,8 +181,76 @@ class MainApp {
 
     timeline.innerHTML = posts.map((post) => this.renderPost(post)).join("");
 
+    // Add loading indicator for infinite scroll
+    if (this.timelineHasMore) {
+      timeline.innerHTML += `
+        <div id="timeline-loading" class="loading-more" style="display: none;">
+          <div class="loading-spinner">Loading more posts...</div>
+        </div>
+      `;
+    }
+
     // Initialize post view tracking for all rendered posts
     SocialUtils.postViewTracker.observeAllPosts();
+
+    // Setup infinite scroll
+    this.setupInfiniteScroll();
+  }
+
+  appendToTimeline(posts) {
+    const timeline = document.querySelector(".timeline");
+    const loadingIndicator = document.getElementById("timeline-loading");
+
+    if (!timeline || !posts || posts.length === 0) return;
+
+    // Remove loading indicator temporarily
+    if (loadingIndicator) {
+      loadingIndicator.remove();
+    }
+
+    // Append new posts
+    const newPostsHtml = posts.map((post) => this.renderPost(post)).join("");
+    timeline.insertAdjacentHTML("beforeend", newPostsHtml);
+
+    // Re-add loading indicator if there are more posts
+    if (this.timelineHasMore) {
+      timeline.insertAdjacentHTML(
+        "beforeend",
+        `
+        <div id="timeline-loading" class="loading-more" style="display: none;">
+          <div class="loading-spinner">Loading more posts...</div>
+        </div>
+      `
+      );
+    }
+
+    // Initialize post view tracking for new posts
+    SocialUtils.postViewTracker.observeAllPosts();
+  }
+
+  setupInfiniteScroll() {
+    // Remove existing scroll listener to avoid duplicates
+    if (this.scrollHandler) {
+      window.removeEventListener("scroll", this.scrollHandler);
+    }
+
+    this.scrollHandler = () => {
+      if (this.timelineLoading || !this.timelineHasMore) return;
+
+      const { scrollTop, scrollHeight, clientHeight } =
+        document.documentElement;
+
+      // Load more when user is 80% down the page
+      if (scrollTop + clientHeight >= scrollHeight * 0.8) {
+        const loadingIndicator = document.getElementById("timeline-loading");
+        if (loadingIndicator) {
+          loadingIndicator.style.display = "block";
+        }
+        this.loadTimeline(true);
+      }
+    };
+
+    window.addEventListener("scroll", this.scrollHandler);
   }
 
   renderPost(post) {
