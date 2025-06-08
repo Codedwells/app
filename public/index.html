@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>WhatIDo Social</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="social-style.css" />
+    <script src="social-script.js" defer></script>
+  </head>
+  <body>
+    <!-- Main App -->
+    <div id="mainApp" class="screen">
+      <!-- Sidebar Navigation -->
+      <nav class="sidebar-nav">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="twitter-logo">
+            <g>
+              <path
+                d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"
+              ></path>
+            </g>
+          </svg>
+        </div>
+        <ul class="nav-links">
+          <li class="nav-item active">
+            <a href="#"><i class="nav-icon">🏠</i> Home</a>
+          </li>
+          <li class="nav-item">
+            <a href="#"><i class="nav-icon">🔍</i> Explore</a>
+          </li>
+          <li class="nav-item">
+            <a href="#"><i class="nav-icon">🔔</i> Notifications</a>
+          </li>
+          <li class="nav-item">
+            <a href="#"><i class="nav-icon">✉️</i> Messages</a>
+          </li>
+          <li class="nav-item">
+            <a href="#"><i class="nav-icon">📑</i> Lists</a>
+          </li>
+          <li class="nav-item">
+            <a href="profile.html"><i class="nav-icon">👤</i> Profile</a>
+          </li>
+        </ul>
+        <button id="createPostBtn" class="tweet-btn">Tweet</button>
+        <div id="userInfo" class="user-profile">
+          <!-- User info will be populated by JavaScript -->
+        </div>
+      </nav>
+
+      <!-- Main Content -->
+      <div class="app-main">
+        <!-- Header -->
+        <header class="app-header">
+          <h2>Home</h2>
+          <div class="topbar-actions">
+            <button id="logoutBtn" class="header-icon-btn">
+              <i class="nav-icon">🔒</i>
+            </button>
+          </div>
+        </header>
+
+        <!-- Timeline -->
+        <main class="timeline">
+          <!-- Compose Tweet Area -->
+          <div class="compose-area">
+            <div class="compose-avatar">
+              <div class="user-avatar" id="compose-avatar">
+                <!-- Will be filled with user's initial -->
+              </div>
+            </div>
+            <div class="compose-input">
+              <div
+                contenteditable="true"
+                id="tweet-compose"
+                class="tweet-compose-input"
+                placeholder="What's happening?"
+              ></div>
+              <div class="compose-actions">
+                <div class="compose-tools">
+                  <button class="compose-tool"><i>📷</i></button>
+                  <button class="compose-tool"><i>📊</i></button>
+                  <button class="compose-tool"><i>😀</i></button>
+                  <button class="compose-tool"><i>📅</i></button>
+                </div>
+                <button class="tweet-btn-small">Tweet</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tweet Feed -->
+          <div id="timeline" class="timeline-content">
+            <div class="loading">Loading timeline...</div>
+          </div>
+        </main>
+      </div>
+
+      <!-- Right Sidebar -->
+      <aside class="right-sidebar">
+        <div class="search-container">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input
+              type="text"
+              placeholder="Search WhatIDo"
+              class="search-input"
+            />
+          </div>
+        </div>
+
+        <div class="trends-container">
+          <h2>Trends for you</h2>
+          <div class="trends-list">
+            <div class="trend-item">
+              <div class="trend-category">Trending in Technology</div>
+              <div class="trend-name">#JavaScript</div>
+              <div class="trend-tweets">13.2K Tweets</div>
+            </div>
+            <div class="trend-item">
+              <div class="trend-category">Trending in Design</div>
+              <div class="trend-name">#UXDesign</div>
+              <div class="trend-tweets">7.5K Tweets</div>
+            </div>
+            <div class="trend-item">
+              <div class="trend-category">Trending in Web Dev</div>
+              <div class="trend-name">#ReactJS</div>
+              <div class="trend-tweets">5.8K Tweets</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="follow-container">
+          <h2>Who to follow</h2>
+          <div id="suggestedUsers" class="suggested-users">
+            <div class="loading">Loading suggestions...</div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal" class="modal" style="display: none">
+      <!-- Modal content will be populated by JavaScript -->
+    </div>
+
+    <!-- Notification styles -->
+    <style>
+      .notification {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px 20px;
+        border-radius: 5px;
+        color: white;
+        font-weight: bold;
+        z-index: 1000;
+        animation: slideIn 0.3s ease-out;
+      }
+
+      .notification.success {
+        background-color: #4caf50;
+      }
+
+      .notification.error {
+        background-color: #f44336;
+      }
+
+      @keyframes slideIn {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+    </style>
+  </body>
+</html>
