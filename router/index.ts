@@ -13,7 +13,17 @@ import {
   getUserProfile,
   createPost,
   likeComment,
+  getRecommendedTimeline,
+  getExplorePosts,
+  getRecommendedUsers,
+  trainRecommendationModel,
+  getRecommendationModelStatus,
 } from "../controllers/social.Controller";
+import {
+  recordSeenPosts,
+  getUserSeenPosts,
+  clearSeenPosts,
+} from "../controllers/userHistory.Controller";
 import {
   loginUser,
   getAllUsers,
@@ -71,5 +81,17 @@ router.post("/posts/:postId/comments", authenticateToken, commentOnPost);
 router.get("/posts/:postId/comments", authenticateToken, getPostComments);
 router.post("/comments/:commentId/like", authenticateToken, likeComment);
 router.post("/users/:userIdToFollow/follow", authenticateToken, followUser);
+
+// AI-powered recommendation routes (protected)
+router.get("/ai/timeline", authenticateToken, getRecommendedTimeline);
+router.get("/ai/explore", authenticateToken, getExplorePosts);
+router.get("/ai/users/recommended", authenticateToken, getRecommendedUsers);
+router.get("/ai/model/status", authenticateToken, getRecommendationModelStatus);
+router.post("/ai/model/train", authenticateToken, trainRecommendationModel);
+
+// User post history routes (protected)
+router.post("/user/seen-posts", authenticateToken, recordSeenPosts);
+router.get("/user/seen-posts", authenticateToken, getUserSeenPosts);
+router.delete("/user/seen-posts", authenticateToken, clearSeenPosts);
 
 export default router;

@@ -17,4 +17,6 @@ export const ENV = {
   MINIO_API_PORT: parseInt(process.env.MINIO_API_PORT || "9000"),
   MINIO_CONSOLE_PORT: parseInt(process.env.MINIO_CONSOLE_PORT || "9001"),
   MONGODB_URI: process.env.MONGODB_URI as string,
+  RECOMMENDATION_SERVICE_URL:
+    process.env.RECOMMENDATION_SERVICE_URL || "http://localhost:8000",
 };

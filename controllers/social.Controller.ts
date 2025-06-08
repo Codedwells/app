@@ -1,7 +1,8 @@
 import { Response } from "express";
-import { User, Post, Comment } from "../models";
+import { User, Post, Comment, UserPostHistory } from "../models";
 import { Types } from "mongoose";
 import { AuthenticatedRequest } from "../middleware/auth";
+import { recommendationService } from "../services/recommendationService";
 
 // Get user timeline (posts from followed users + own posts)
 export async function getTimeline(
@@ -352,5 +353,290 @@ export async function likeComment(
   } catch (error) {
     console.error("Error liking comment:", error);
     res.status(500).json({ error: "Failed to like comment" });
+  }
+}
+
+// AI-powered recommendation endpoints
+
+// Get AI-recommended timeline
+export async function getRecommendedTimeline(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user._id.toString();
+    const limit = parseInt(req.query.limit as string) || 20;
+
+    // Get user's seen posts history
+    const userHistory = await UserPostHistory.findOne({ user: userId });
+    const seenPostIds = userHistory?.seenPosts || [];
+
+    // Try to get AI recommendations first
+    try {
+      const aiRecommendations =
+        await recommendationService.getRecommendedTimeline(userId, limit * 2);
+
+      if (aiRecommendations.timeline && aiRecommendations.timeline.length > 0) {
+        // Filter out seen posts from AI recommendations
+        const unseenRecommendations = aiRecommendations.timeline.filter(
+          (p) => !seenPostIds.some((seenId) => seenId.toString() === p.post_id)
+        );
+
+        if (unseenRecommendations.length > 0) {
+          // Get full post details from MongoDB using the recommended post IDs
+          const postIds = unseenRecommendations.map((p) => p.post_id);
+          const posts = await Post.find({ _id: { $in: postIds } })
+            .populate("author", "username fullName profilePicture isVerified")
+            .populate("category", "name")
+            .lean();
+
+          // Merge AI scores with full post data
+          const enrichedPosts = posts.map((post) => {
+            const aiPost = unseenRecommendations.find(
+              (p) => p.post_id === post._id.toString()
+            );
+            return {
+              ...post,
+              aiScore: aiPost?.score || 0,
+            };
+          });
+
+          // Sort by AI score and limit results
+          enrichedPosts.sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
+
+          res.json(enrichedPosts.slice(0, limit));
+          return;
+        }
+      }
+    } catch (aiError) {
+      console.warn(
+        "AI recommendation service unavailable, falling back to traditional timeline:",
+        aiError
+      );
+    }
+
+    // Fallback to traditional timeline if AI service fails
+    await getTimeline(req, res);
+  } catch (error) {
+    console.error("Error getting recommended timeline:", error);
+    res.status(500).json({ error: "Failed to get recommended timeline" });
+  }
+}
+
+// Helper function to get time-filtered posts
+async function getTimeFilteredPosts(
+  userId: string,
+  userInterests: Types.ObjectId[],
+  seenPostIds: Types.ObjectId[],
+  limit: number
+): Promise<any[]> {
+  const now = new Date();
+
+  // First try: Posts from past 3 days
+  const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+
+  let posts = await Post.find({
+    visibility: "public",
+    author: { $ne: userId },
+    _id: { $nin: seenPostIds }, // Exclude seen posts
+    createdAt: { $gte: threeDaysAgo },
+    ...(userInterests?.length ? { category: { $in: userInterests } } : {}),
+  })
+    .populate("author", "username fullName profilePicture isVerified")
+    .populate("category", "name")
+    .sort({ likeCount: -1, createdAt: -1 })
+    .limit(limit * 2) // Get more to account for filtering
+    .lean();
+
+  // If we don't have enough posts, try past 5 days
+  if (posts.length < limit) {
+    const fiveDaysAgo = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
+
+    const additionalPosts = await Post.find({
+      visibility: "public",
+      author: { $ne: userId },
+      _id: { $nin: [...seenPostIds, ...posts.map((p) => p._id)] }, // Exclude seen posts and already fetched posts
+      createdAt: { $gte: fiveDaysAgo, $lt: threeDaysAgo }, // Only posts from 3-5 days ago
+      ...(userInterests?.length ? { category: { $in: userInterests } } : {}),
+    })
+      .populate("author", "username fullName profilePicture isVerified")
+      .populate("category", "name")
+      .sort({ likeCount: -1, createdAt: -1 })
+      .limit(limit * 2)
+      .lean();
+
+    posts = [...posts, ...additionalPosts];
+  }
+
+  return posts.slice(0, limit);
+}
+
+// Get explore page (predicted likes)
+export async function getExplorePosts(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user._id.toString();
+    const limit = parseInt(req.query.limit as string) || 15;
+
+    // Get user's seen posts history
+    const userHistory = await UserPostHistory.findOne({ user: userId });
+    const seenPostIds = userHistory?.seenPosts || [];
+
+    // Try to get AI predictions first
+    try {
+      const aiPredictions = await recommendationService.getPredictedLikes(
+        userId,
+        limit * 2 // Get more predictions to account for filtering
+      );
+
+      if (aiPredictions.predictions && aiPredictions.predictions.length > 0) {
+        // Filter out seen posts from AI predictions
+        const unseenPredictions = aiPredictions.predictions.filter(
+          (p) => !seenPostIds.some((seenId) => seenId.toString() === p.post_id)
+        );
+
+        if (unseenPredictions.length > 0) {
+          // Get full post details from MongoDB
+          const postIds = unseenPredictions.map((p) => p.post_id);
+          const posts = await Post.find({ _id: { $in: postIds } })
+            .populate("author", "username fullName profilePicture isVerified")
+            .populate("category", "name")
+            .lean();
+
+          // Merge AI scores with full post data
+          const enrichedPosts = posts.map((post) => {
+            const aiPost = unseenPredictions.find(
+              (p) => p.post_id === post._id.toString()
+            );
+            return {
+              ...post,
+              predictedScore: aiPost?.score || 0,
+            };
+          });
+
+          // Sort by predicted score and limit results
+          enrichedPosts.sort(
+            (a, b) => (b.predictedScore || 0) - (a.predictedScore || 0)
+          );
+
+          res.json(enrichedPosts.slice(0, limit));
+          return;
+        }
+      }
+    } catch (aiError) {
+      console.warn(
+        "AI prediction service unavailable, falling back to time-filtered posts:",
+        aiError
+      );
+    }
+
+    // Fallback: Get time-filtered posts
+    const user = await User.findById(userId);
+    const fallbackPosts = await getTimeFilteredPosts(
+      userId,
+      user?.interests || [],
+      seenPostIds,
+      limit
+    );
+
+    res.json(fallbackPosts);
+  } catch (error) {
+    console.error("Error getting explore posts:", error);
+    res.status(500).json({ error: "Failed to get explore posts" });
+  }
+}
+
+// Get AI-recommended users to follow
+export async function getRecommendedUsers(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user._id.toString();
+    const limit = parseInt(req.query.limit as string) || 10;
+
+    // Try to get AI recommendations first
+    try {
+      const aiRecommendations = await recommendationService.getRecommendedUsers(
+        userId,
+        limit
+      );
+
+      if (
+        aiRecommendations.suggested_users &&
+        aiRecommendations.suggested_users.length > 0
+      ) {
+        // Get full user details from MongoDB
+        const userIds = aiRecommendations.suggested_users.map((u) => u.user_id);
+        const users = await User.find({ _id: { $in: userIds } })
+          .select(
+            "username fullName profilePicture bio followerCount followingCount isVerified interests"
+          )
+          .populate("interests", "name")
+          .lean();
+
+        // Merge AI scores with full user data
+        const enrichedUsers = users.map((user) => {
+          const aiUser = aiRecommendations.suggested_users.find(
+            (u) => u.user_id === user._id.toString()
+          );
+          return {
+            ...user,
+            recommendationScore: aiUser?.score || 0,
+            sharedInterests: aiUser?.shared_interests || 0,
+          };
+        });
+
+        // Sort by recommendation score
+        enrichedUsers.sort(
+          (a, b) => (b.recommendationScore || 0) - (a.recommendationScore || 0)
+        );
+
+        res.json(enrichedUsers);
+        return;
+      }
+    } catch (aiError) {
+      console.warn(
+        "AI recommendation service unavailable, falling back to traditional suggestions:",
+        aiError
+      );
+    }
+
+    // Fallback to traditional user suggestions
+    await getSuggestedUsers(req, res);
+  } catch (error) {
+    console.error("Error getting recommended users:", error);
+    res.status(500).json({ error: "Failed to get recommended users" });
+  }
+}
+
+// Train the recommendation model (admin endpoint)
+export async function trainRecommendationModel(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    // Check if user is admin (you might want to add admin role check here)
+    const trainingResult = await recommendationService.trainModel();
+    res.json(trainingResult);
+  } catch (error) {
+    console.error("Error training recommendation model:", error);
+    res.status(500).json({ error: "Failed to train recommendation model" });
+  }
+}
+
+// Get recommendation model status
+export async function getRecommendationModelStatus(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const status = await recommendationService.getModelStatus();
+    res.json(status);
+  } catch (error) {
+    console.error("Error getting model status:", error);
+    res.status(500).json({ error: "Failed to get model status" });
   }
 }

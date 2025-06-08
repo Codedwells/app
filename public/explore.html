@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>WhatIDo Social</title>
+    <title>Explore - WhatIDo Social</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="social-style.css" />
     <script src="shared-utils.js" defer></script>
-    <script src="main.js" defer></script>
+    <script src="explore.js" defer></script>
   </head>
   <body>
     <!-- Main App -->
@@ -22,10 +22,10 @@
           </svg>
         </div>
         <ul class="nav-links">
-          <li class="nav-item active">
+          <li class="nav-item">
             <a href="index.html"><i class="nav-icon">🏠</i> Home</a>
           </li>
-          <li class="nav-item">
+          <li class="nav-item active">
             <a href="explore.html"><i class="nav-icon">🔍</i> Explore</a>
           </li>
           <li class="nav-item">
@@ -42,45 +42,23 @@
       <div class="app-main">
         <!-- Header -->
         <header class="app-header">
-          <h2>Home</h2>
-          <div class="topbar-actions">
-            <button id="logoutBtn" class="header-icon-btn">
-              <i class="nav-icon">🔒</i>
-            </button>
+          <div class="explore-header">
+            <h2>Explore</h2>
+            <div
+              class="ai-indicator"
+              id="exploreAIIndicator"
+              style="display: none"
+            >
+              <span class="ai-text"> Your recommendations</span>
+            </div>
           </div>
         </header>
 
-        <!-- Timeline -->
-        <main class="timeline">
-          <!-- Compose Tweet Area -->
-          <div class="compose-area">
-            <div class="compose-avatar">
-              <div class="user-avatar" id="compose-avatar">
-                <!-- Will be filled with user's initial -->
-              </div>
-            </div>
-            <div class="compose-input">
-              <div
-                contenteditable="true"
-                id="tweet-compose"
-                class="tweet-compose-input"
-                placeholder="What's happening?"
-              ></div>
-              <div class="compose-actions">
-                <div class="compose-tools">
-                  <button class="compose-tool"><i>📷</i></button>
-                  <button class="compose-tool"><i>📊</i></button>
-                  <button class="compose-tool"><i>😀</i></button>
-                  <button class="compose-tool"><i>📅</i></button>
-                </div>
-                <button class="tweet-btn-small">Tweet</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Tweet Feed -->
-          <div id="timeline" class="timeline-content">
-            <div class="loading">Loading timeline...</div>
+        <!-- Explore Content -->
+        <main class="timeline" id="exploreTimeline">
+          <div class="loading" id="exploreLoading">
+            <div class="loading-spinner"></div>
+            <p>Loading recommendations...</p>
           </div>
         </main>
       </div>
@@ -89,40 +67,26 @@
       <aside class="right-sidebar">
         <div class="search-container">
           <div class="search-box">
-            <span class="search-icon">🔍</span>
+            <i class="search-icon">🔍</i>
             <input
               type="text"
-              placeholder="Search WhatIDo"
               class="search-input"
+              placeholder="Search WhatIDo"
             />
           </div>
         </div>
 
         <div class="trends-container">
-          <h2>Trends for you</h2>
-          <div class="trends-list">
-            <div class="trend-item">
-              <div class="trend-category">Trending in Technology</div>
-              <div class="trend-name">#JavaScript</div>
-              <div class="trend-tweets">13.2K Tweets</div>
-            </div>
-            <div class="trend-item">
-              <div class="trend-category">Trending in Design</div>
-              <div class="trend-name">#UXDesign</div>
-              <div class="trend-tweets">7.5K Tweets</div>
-            </div>
-            <div class="trend-item">
-              <div class="trend-category">Trending in Web Dev</div>
-              <div class="trend-name">#ReactJS</div>
-              <div class="trend-tweets">5.8K Tweets</div>
-            </div>
+          <h2>Trending for you</h2>
+          <div id="trendingTopics">
+            <!-- Trending topics will be populated by JavaScript -->
           </div>
         </div>
 
         <div class="follow-container">
           <h2>Who to follow</h2>
           <div id="suggestedUsers" class="suggested-users">
-            <div class="loading">Loading suggestions...</div>
+            <!-- Suggested users will be populated by JavaScript -->
           </div>
         </div>
       </aside>
@@ -155,6 +119,68 @@
         background-color: #f44336;
       }
 
+      .ai-indicator {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 5px;
+      }
+
+      .ai-badge {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: bold;
+      }
+
+      .ai-text {
+        font-size: 13px;
+        color: #657786;
+      }
+
+      .explore-header h2 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: bold;
+      }
+
+      .explore-stats {
+        background: #f7f9fa;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 20px;
+        border: 1px solid #e1e8ed;
+      }
+
+      .explore-stats h3 {
+        margin: 0 0 10px 0;
+        font-size: 16px;
+        color: #1da1f2;
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 16px;
+      }
+
+      .stat-item {
+        text-align: center;
+      }
+
+      .stat-value {
+        font-size: 18px;
+        font-weight: bold;
+        color: #14171a;
+      }
+
+      .stat-label {
+        font-size: 13px;
+        color: #657786;
+      }
+
       @keyframes slideIn {
         from {
           transform: translateX(100%);
@@ -166,5 +192,7 @@
         }
       }
     </style>
+
+    <script src="explore.js" defer></script>
   </body>
 </html>

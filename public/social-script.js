@@ -89,6 +89,23 @@ class SocialApp {
     if (createPostBtn) {
       createPostBtn.addEventListener("click", () => this.showCreatePostModal());
     }
+
+    // Navigation events
+    const navItems = document.querySelectorAll(".nav-item");
+    navItems.forEach((item) => {
+      const link = item.querySelector("a");
+      if (link && link.textContent.includes("Explore")) {
+        link.addEventListener("click", (e) => {
+          e.preventDefault();
+          this.showExploreView();
+        });
+      } else if (link && link.textContent.includes("Home")) {
+        link.addEventListener("click", (e) => {
+          e.preventDefault();
+          this.showHomeView();
+        });
+      }
+    });
   }
 
   async handleLogin(e) {
@@ -187,15 +204,29 @@ class SocialApp {
 
   async loadTimeline() {
     try {
-      const response = await fetch("/api/v1/timeline", {
+      // Try AI-powered timeline first
+      let response = await fetch("/api/v1/ai/timeline", {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
         },
       });
 
+      // If AI service is unavailable, fallback to traditional timeline
+      if (!response.ok) {
+        response = await fetch("/api/v1/timeline", {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          },
+        });
+      }
+
       if (response.ok) {
         const posts = await response.json();
         this.renderTimeline(posts);
+
+        // Show AI indicator if we got AI recommendations
+        const isAI = response.url.includes("/ai/timeline");
+        this.showAIIndicator(isAI, "timeline");
       }
     } catch (error) {
       console.error("Failed to load timeline:", error);
@@ -204,18 +235,50 @@ class SocialApp {
 
   async loadSuggestedUsers() {
     try {
-      const response = await fetch("/api/v1/users/suggested", {
+      // Try AI-powered user recommendations first
+      let response = await fetch("/api/v1/ai/users/recommended", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+      });
+
+      // If AI service is unavailable, fallback to traditional suggestions
+      if (!response.ok) {
+        response = await fetch("/api/v1/users/suggested", {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          },
+        });
+      }
+
+      if (response.ok) {
+        const users = await response.json();
+        this.renderSuggestedUsers(users);
+
+        // Show AI indicator if we got AI recommendations
+        const isAI = response.url.includes("/ai/users/recommended");
+        this.showAIIndicator(isAI, "users");
+      }
+    } catch (error) {
+      console.error("Failed to load suggested users:", error);
+    }
+  }
+
+  async loadExplorePosts() {
+    try {
+      const response = await fetch("/api/v1/ai/explore", {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
         },
       });
 
       if (response.ok) {
-        const users = await response.json();
-        this.renderSuggestedUsers(users);
+        const posts = await response.json();
+        this.renderExplorePosts(posts);
+        this.showAIIndicator(true, "explore");
       }
     } catch (error) {
-      console.error("Failed to load suggested users:", error);
+      console.error("Failed to load explore posts:", error);
     }
   }
 
@@ -408,6 +471,11 @@ class SocialApp {
 
     // Update the post count in the profile
     document.getElementById("post-count").textContent = posts.length;
+
+    // Initialize post view tracking for all rendered posts
+    if (typeof SocialUtils !== "undefined" && SocialUtils.postViewTracker) {
+      SocialUtils.postViewTracker.observeAllPosts();
+    }
   }
 
   renderTimeline(posts) {
@@ -503,6 +571,130 @@ class SocialApp {
         `
       )
       .join("");
+
+    // Initialize post view tracking for all rendered posts
+    if (typeof SocialUtils !== "undefined" && SocialUtils.postViewTracker) {
+      SocialUtils.postViewTracker.observeAllPosts();
+    }
+  }
+
+  renderExplorePosts(posts) {
+    const exploreContent = document.getElementById("exploreContent");
+    if (!exploreContent) return;
+
+    if (posts.length === 0) {
+      exploreContent.innerHTML = `
+        <div class="empty-timeline">
+          <div class="empty-message">
+            <h3>No recommendations yet</h3>
+            <p>Start interacting with posts to get personalized recommendations.</p>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    exploreContent.innerHTML = posts
+      .map(
+        (post) => `
+            <div class="post" data-post-id="${post.post_id || post._id}">
+                <div class="post-avatar">
+                    <div class="user-avatar">
+                        ${String(post.author || "?")
+                          .charAt(0)
+                          .toUpperCase()}
+                    </div>
+                </div>
+                <div class="post-body">
+                    <div class="post-header">
+                        <div class="post-user-info">
+                            <span class="post-author">${String(
+                              post.author || "Unknown"
+                            )}</span>
+                            <span class="post-username">@${String(
+                              post.author || "unknown"
+                            )
+                              .toLowerCase()
+                              .replace(/\s+/g, "")}</span>
+                            <span class="post-time">· ${this.formatDate(
+                              post.createdAt
+                            )}</span>
+                            ${
+                              post.score
+                                ? `<span class="ai-score">📊 ${Math.round(
+                                    post.score * 100
+                                  )}% match</span>`
+                                : ""
+                            }
+                        </div>
+                    </div>
+                    <div class="post-content">
+                        <p>${this.formatContent(
+                          post.text || post.content || ""
+                        )}</p>
+                        ${
+                          post.media && post.media.length > 0
+                            ? `
+                          <div class="post-media">
+                            ${post.media
+                              .map(
+                                (m) => `
+                              ${
+                                m.type === "image"
+                                  ? `<img src="${m.url}" alt="Post image" />`
+                                  : ""
+                              }
+                              ${
+                                m.type === "video"
+                                  ? `<video controls><source src="${m.url}" type="video/mp4"></video>`
+                                  : ""
+                              }
+                            `
+                              )
+                              .join("")}
+                          </div>
+                        `
+                            : ""
+                        }
+                        ${
+                          post.hashtags && post.hashtags.length > 0
+                            ? `
+                          <div class="post-hashtags">
+                            ${post.hashtags
+                              .map(
+                                (tag) => `<span class="hashtag">#${tag}</span>`
+                              )
+                              .join(" ")}
+                          </div>
+                        `
+                            : ""
+                        }
+                    </div>
+                    <div class="post-actions">
+                        <button class="action-btn comment-btn" onclick="socialApp.showComments('${
+                          post.post_id || post._id
+                        }')">
+                            <span>💬</span> ${post.commentCount || 0}
+                        </button>
+                        <button class="action-btn like-btn" onclick="socialApp.toggleLike('${
+                          post.post_id || post._id
+                        }')">
+                            <span>❤️</span> ${post.likeCount || 0}
+                        </button>
+                        <button class="action-btn share-btn">
+                            <span>🔄</span> ${post.shareCount || 0}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `
+      )
+      .join("");
+
+    // Initialize post view tracking for all rendered posts
+    if (typeof SocialUtils !== "undefined" && SocialUtils.postViewTracker) {
+      SocialUtils.postViewTracker.observeAllPosts();
+    }
   }
 
   async toggleLike(postId) {
@@ -895,10 +1087,108 @@ class SocialApp {
       notification.remove();
     }, 3000);
   }
+
+  showAIIndicator(isAI, section) {
+    // Find or create AI indicator
+    let indicator = document.getElementById(`ai-indicator-${section}`);
+    if (!indicator) {
+      indicator = document.createElement("div");
+      indicator.id = `ai-indicator-${section}`;
+      indicator.className = "ai-indicator";
+
+      // Find appropriate container based on section
+      let container;
+      if (section === "timeline") {
+        container = document.querySelector(".feed-header");
+      } else if (section === "users") {
+        container = document.querySelector(".suggested-users h3");
+      } else if (section === "explore") {
+        container = document.querySelector(".explore-header");
+      }
+
+      if (container) {
+        container.appendChild(indicator);
+      }
+    }
+
+    if (isAI) {
+      indicator.innerHTML = '<span class="ai-badge">🤖 AI Powered</span>';
+      indicator.style.display = "block";
+    } else {
+      indicator.innerHTML =
+        '<span class="fallback-badge">📊 Traditional</span>';
+      indicator.style.display = "block";
+    }
+  }
+
+  showHomeView() {
+    // Update active nav item
+    document
+      .querySelectorAll(".nav-item")
+      .forEach((item) => item.classList.remove("active"));
+    const homeNavItem = document.querySelector(
+      '.nav-item a[href="index.html"]'
+    );
+    if (homeNavItem) {
+      homeNavItem.parentElement.classList.add("active");
+    }
+
+    // Show home content, hide explore
+    const homeContent = document.querySelector(".main-feed");
+    const exploreContent = document.getElementById("exploreView");
+
+    if (homeContent) homeContent.style.display = "block";
+    if (exploreContent) exploreContent.style.display = "none";
+
+    this.loadTimeline();
+    this.loadSuggestedUsers();
+  }
+
+  showExploreView() {
+    // Update active nav item
+    document
+      .querySelectorAll(".nav-item")
+      .forEach((item) => item.classList.remove("active"));
+    const exploreNavItem = Array.from(
+      document.querySelectorAll(".nav-item a")
+    ).find((a) => a.textContent.includes("Explore"));
+    if (exploreNavItem) exploreNavItem.parentElement.classList.add("active");
+
+    // Hide home content, show or create explore
+    const homeContent = document.querySelector(".main-feed");
+    let exploreContent = document.getElementById("exploreView");
+
+    if (homeContent) homeContent.style.display = "none";
+
+    if (!exploreContent) {
+      exploreContent = this.createExploreView();
+      const mainContent = document.querySelector(".app-main");
+      if (mainContent) mainContent.appendChild(exploreContent);
+    }
+
+    exploreContent.style.display = "block";
+    this.loadExplorePosts();
+  }
+
+  createExploreView() {
+    const exploreView = document.createElement("div");
+    exploreView.id = "exploreView";
+    exploreView.className = "explore-view";
+    exploreView.innerHTML = `
+      <div class="explore-header">
+        <h2>Explore</h2>
+        <p>Discover new content you might like</p>
+      </div>
+      <div id="exploreContent" class="explore-content">
+        <div class="loading">Loading recommendations...</div>
+      </div>
+    `;
+    return exploreView;
+  }
 }
 
-// Initialize the app when DOM is loaded
-let app;
+// Initialize the app when the DOM is loaded
+let socialApp;
 document.addEventListener("DOMContentLoaded", () => {
-  app = new SocialApp();
+  socialApp = new SocialApp();
 });
