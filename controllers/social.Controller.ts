@@ -141,7 +141,7 @@ export async function commentOnPost(
     const comment = new Comment({
       post: postId,
       author: userId,
-      content: content.trim(),
+      text: content.trim(),
     });
 
     await comment.save();
