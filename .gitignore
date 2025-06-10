@@ -37,6 +37,3 @@ __pycache__/
 # IDEs
 .idea/
 *.iml
-
-# Docker files (if you want to ignore local docker data)
-docker-compose.override.yml

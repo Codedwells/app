@@ -1,0 +1,28 @@
+services:
+  app:
+    build:
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./app:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    env_file:
+      - .env
+    command: npm run dev
+
+  mongo:
+    ports:
+      - "27017:27017"
+
+  algorithm:
+    build:
+      context: ./algorithm
+      dockerfile: Dockerfile
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./algorithm:/app
+    networks:
+      - app-network
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
